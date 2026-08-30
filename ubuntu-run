@@ -1,0 +1,13 @@
+#!/bin/bash
+# Run a command inside the Ubuntu proot, bind-mounting Termux $HOME.
+# Usage: ubuntu-run "command"   (or pass args)
+ARGS=("$@")
+if [ ${#ARGS[@]} -eq 0 ]; then
+  proot-distro login ubuntu \
+    -b /data/data/com.termux/files/home:/data/data/com.termux/files/home \
+    -- bash
+else
+  proot-distro login ubuntu \
+    -b /data/data/com.termux/files/home:/data/data/com.termux/files/home \
+    -- bash -lc "${ARGS[*]}"
+fi

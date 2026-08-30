@@ -10,10 +10,27 @@
         android:protectionLevel="signature"/>
 
     <uses-permission android:name="com.accessdroid.termux.permission.BIND_ACCESSIBILITY_SERVICE"/>
-    <!-- Optional: needed if we want to auto-start after reboot -->
+    <!-- Needed to auto-start after reboot (optional) -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-    <!-- Optional: to control volume/some system settings -->
+    <!-- Needed for some system interactions (optional) -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+
+    <!--
+        Compatibility declarations (Android 16 / SDK 36)
+        - supports-screens includes large and xlarge so the app installs
+          on tablets like POCO 24074PCD2I.
+        - targetSdkVersion 36 applies Android 16 behavior changes.
+        - WRITE/READ_EXTERNAL_STORAGE removed (deprecated in API 33+).
+    -->
+    <supports-screens
+        android:smallScreens="true"
+        android:normalScreens="true"
+        android:largeScreens="true"
+        android:xlargeScreens="true" />
+
+    <uses-sdk
+        android:minSdkVersion="24"
+        android:targetSdkVersion="36" />
 
     <application
         android:allowBackup="true"
@@ -25,13 +42,13 @@
         <!-- The AccessibilityService component -->
         <service
             android:name=".AccessibilityServiceImpl"
-            android:exported="false"
-            android:permission="com.accessdroid.termux.permission.BIND_ACCESSIBILITY_SERVICE">
+            android:permission="com.accessdroid.termux.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService"/>
             </intent-filter>
 
-            <!-- Service meta-data -->
+            <!-- Service meta-data: capabilities + feedback -->
             <meta-data
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service_config"/>

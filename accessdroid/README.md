@@ -111,15 +111,65 @@ done
   apps.
 
 ## Releases
-Latest APK is the **[latest release](https://github.com/yashas-13/accessdroid-termux/releases/latest)** (`v1.0.1`).
+Latest APK is the **[latest release](https://github.com/yashas-13/accessdroid-termux/releases/latest)** (`v1.0.2`).
 
 ```
-# SHA256  2b6b3800c2977df04bf8a570e6b7f95c2db19cbc10d0a5376e95192391137789
-
+# SHA256  bd60ae63fdc9b885ee321953798eed60c8f3fbd8cb2a04e12ddfe9078e85b4de
 ```
-# SHA256  2b6b3800c2977df04bf8a570e6b7f95c2db19cbc10d0a5376e95192391137789
+```sh
 curl -L https://github.com/yashas-13/accessdroid-termux/releases/latest/download/AccessDroid.apk -o AccessDroid.apk
 ```
+
+## Troubleshooting
+
+### AccessDroid not visible in Accessibility settings
+1. **Uninstall first** if you previously installed an older version:
+   ```sh
+   am uninstall com.accessdroid.termux
+   ```
+2. Install the **latest APK** (v1.0.2+ uses `android.permission.BIND_ACCESSIBILITY_SERVICE`):
+   ```sh
+   termux-open ~/bin/accessdroid/build/AccessDroid.apk
+   ```
+3. Open Accessibility settings:
+   ```sh
+   am start -a android.settings.ACCESSIBILITY_SETTINGS
+   ```
+4. Look under **Downloaded services** (or **Installed services**).
+   - On Android 11+ it may be under **Installed apps** → **Downloaded apps**.
+   - If you don't see it, force-stop Termux and try again:
+     ```sh
+     am force-stop com.termux && am start -n com.termux/.app.TermuxActivity
+     ```
+
+### `amctl tap/swipe` returns "Is AccessDroid's accessibility service enabled?"
+- The AccessibilityService is **not running**. Re-enable:
+  ```sh
+  am start -a android.settings.ACCESSIBILITY_SETTINGS
+  ```
+  Toggle **AccessDroid** OFF → wait 2s → toggle ON again.
+
+### `amctl` commands fail with "Could not connect to socket"
+- The termux-am socket is disabled. Enable it:
+  ```sh
+  sed -i 's/run-termux-am-socket-server=false/run-termux-am-socket-server=true/' ~/.termux/termux.properties
+  termux-reload-settings
+  ```
+- If still not working, force-stop Termux and reopen.
+
+### Service crashes or stops after app kill
+- Android can kill AccessibilityServices under memory pressure.
+- Enable **Ignore battery optimizations** for Termux:
+  ```sh
+  am start -a android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS
+  ```
+  Find Termux → toggle **Allow**.
+
+### Verify service is running
+```sh
+settings get secure enabled_accessibility_services | grep accessdroid
+```
+If empty, the service is not enabled.
 
 ## Files
 | File | Purpose |

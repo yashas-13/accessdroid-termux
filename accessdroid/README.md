@@ -111,10 +111,13 @@ done
   apps.
 
 ## Releases
-Latest APK is attached to the GitHub **[v1.0.1 release](https://github.com/yashas-13/accessdroid-termux/releases/tag/v1.0.1)**.
+Latest APK is the **[latest release](https://github.com/yashas-13/accessdroid-termux/releases/latest)** (`v1.0.1`).
 
 ```
-# SHA256  f3a2a2a34a751ae4b533d8da087c223fa377e951dba550182b68427e34af5eec
+# SHA256  2b6b3800c2977df04bf8a570e6b7f95c2db19cbc10d0a5376e95192391137789
+
+```
+# SHA256  2b6b3800c2977df04bf8a570e6b7f95c2db19cbc10d0a5376e95192391137789
 curl -L https://github.com/yashas-13/accessdroid-termux/releases/latest/download/AccessDroid.apk -o AccessDroid.apk
 ```
 

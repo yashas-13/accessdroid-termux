@@ -36,6 +36,25 @@ no USB cable, no root) using an AccessibilityService + `termux-am`.
 | **Screenshot** (live monitor) | `takeScreenshot` API | `amctl screenshot` |
 | **Inspect UI tree** | dump nodes to log | `amctl tree` then `log ... AccessDroid` |
 
+## Compatibility
+- Minimum Android: **7.0** (API 24 / `minSdkVersion 24`)
+- Target Android: **16** (API 36 / `targetSdkVersion 36`)
+- CPU architecture: **arm64-v8a** (aarch64). No native code — pure Java/Kotlin
+  DEX, so it runs on any ABI.
+- Screen sizes: **phone + tablet** (small/normal/large/**xlarge**) — verified
+  installable on POCO tablets (e.g. `24074PCD2I`, Android 16).
+- No root, no USB cable, no wireless debugging.
+- AccessibilityService must be **manually enabled** in system Settings (one-time).
+- For app-lifecycle commands (`launch`, `stop`, `perms`…), enable the
+  **termux-am socket** in *Termux → Settings → Termux:API*.
+
+## Install (one-step)
+```sh
+bash <(curl -sL https://raw.githubusercontent.com/yashas-13/accessdroid-termux/master/accessdroid/install.sh)
+```
+The script builds (or reuses) the APK, installs it via `termux-open`, opens
+Accessibility settings, enables the termux-am socket, and runs a quick test.
+
 ## Install & Enable (one-time)
 
 ### 1. Build the APK (inside Termux)
@@ -90,6 +109,14 @@ done
   (`termux-accessdroid-2025`) — embedded in `amctl`.
 - Broadcasts are explicit (`-p com.accessdroid.termux`), not broadcast to all
   apps.
+
+## Releases
+Latest APK is attached to the GitHub **[v1.0.1 release](https://github.com/yashas-13/accessdroid-termux/releases/tag/v1.0.1)**.
+
+```
+# SHA256  f3a2a2a34a751ae4b533d8da087c223fa377e951dba550182b68427e34af5eec
+curl -L https://github.com/yashas-13/accessdroid-termux/releases/latest/download/AccessDroid.apk -o AccessDroid.apk
+```
 
 ## Files
 | File | Purpose |

@@ -39,6 +39,24 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true">
 
+        <!-- Main launcher Activity (Settings / Onboarding / Status) -->
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="true"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+
+        <!-- VLM Agent Activity -->
+        <activity
+            android:name=".VlmAgentActivity"
+            android:exported="true"
+            android:label="AccessDroid VLM Agent"
+            android:theme="@android:style/Theme.Material"/>
+
         <!-- The AccessibilityService component -->
         <service
             android:name=".AccessibilityServiceImpl"

@@ -110,11 +110,90 @@ done
 - Broadcasts are explicit (`-p com.accessdroid.termux`), not broadcast to all
   apps.
 
-## Releases
-Latest APK is the **[latest release](https://github.com/yashas-13/accessdroid-termux/releases/latest)** (`v1.0.2`).
+## Onboarding & Status (Settings UI)
+Since v1.0.3, AccessDroid ships an **on-device onboarding app** (a launcher
+activity). Tap the **AccessDroid icon** in your app drawer to open
+`SettingsActivity`, which provides:
+
+- **Status dashboard** — live indicators for:
+  - AccessibilityService (ENABLED / DISABLED)
+  - Termux `am` socket (ENABLED / DISABLED)
+  - VLM config (CONFIGURED / NOT CONFIGURED)
+- **Run Onboarding Setup** button — jumps to
+  `Settings → Accessibility` so you can flip the service toggle.
+- **VLM Provider** fields — save an API endpoint, key, and model for the VLM
+  agent (persisted in app prefs).
+
+> The UI is built programmatically (no XML layouts) so it compiles with the
+> minimal `aapt2`+`javac` chain in `build.sh` — no Android Studio needed.
+
+## VLM Vision Agent (v1.0.3+)
+AccessDroid can now act as a **visual (VLM) agent** — the AI reads the screen
+like a human and clicks at the exact pixels, using the AccessibilityService
+(instead of ADB) for both silent capture and input injection.
+
+**Pipeline (mirrors OmniParser / Pix2Struct / SeeClick style loops):**
 
 ```
-# SHA256  bd60ae63fdc9b885ee321953798eed60c8f3fbd8cb2a04e12ddfe9078e85b4de
+[Screen Snapshot] → [takeScreenshot API] → [VLM inference]
+       ▲                                            │
+       │                                            ▼
+[Wait for UI Render] ← [dispatchGesture(X,Y)] ← [parse {action, coordinates}]
+```
+
+### How it works
+1. **Silent screen capture** — `AccessibilityService.takeScreenshot(Display.DEFAULT_DISPLAY…)`
+   (API 33+) captures the screen with **no permission popup**.
+2. **VLM prompt** — the screenshot (base64) is sent to your configured
+   OpenAI-compatible chat-completions endpoint with a system prompt forcing
+   JSON output.
+3. **Coordinate mapping** — the model returns normalized `[0..1000]`
+   coordinates, which `vlmClick()` maps back to physical pixels and injects
+   via `dispatchGesture()`.
+
+### Configure the VLM provider
+1. Open the **AccessDroid** app → **VLM Provider**.
+2. Enter:
+   - **API Endpoint** — e.g. `https://api.openai.com/v1/chat/completions`
+   - **API Key** — your key (e.g. `sk-...`)
+   - **Model** — a vision model, e.g. `gpt-4o`, `qwen2.5-vl-72b`.
+3. Tap **Save Config**.
+
+> The same config is readable from the app (via `SharedPreferences`) and can
+> be driven headlessly from Termux once you add a launch action to `amctl`.
+
+### Drive from the VLM Agent screen
+Tap the **AccessDroid VLM Agent** tile (or launch `.VlmAgentActivity`):
+
+| Button | Action |
+|---|---|
+| **Screenshot** | Capture + show capture info (no VLM call) |
+| **Run 1 step** | Capture → VLM → dispatch action |
+| **Auto-loop** | Run 5 sequential VLM agent steps (~2.5s apart) |
+
+Enter a task like `Click the search bar and type 'weather'` and tap **Run 1
+step**. The model returns `{action, coordinates, text, reason}` and AccessDroid
+performs the gesture. Auto-loop chains steps for multi-step automation.
+
+### VLM action schema
+```json
+{
+  "action": "CLICK|TYPE|SCROLL|BACK|HOME",
+  "coordinates": [500, 800],        // normalized 0..1000
+  "text": "...",                    // only for TYPE
+  "reason": "why this action"
+}
+```
+
+> ⚠️ VLM calls require a network connection and a valid API key. For an
+> on-device SLM, point the endpoint at a local server (e.g. Ollama)
+> exposing a compatible `/v1/chat/completions` route.
+
+## Releases
+Latest APK is the **[latest release](https://github.com/yashas-13/accessdroid-termux/releases/latest)** (`v1.0.3`).
+
+```
+# SHA256  3caf05e5373c68542d58520d181fba2b7bde0c79cce54975e29aab41bf838829
 ```
 ```sh
 curl -L https://github.com/yashas-13/accessdroid-termux/releases/latest/download/AccessDroid.apk -o AccessDroid.apk
@@ -175,6 +254,8 @@ If empty, the service is not enabled.
 | File | Purpose |
 |---|---|
 | `~/bin/accessdroid/AccessibilityServiceImpl.java` | AccessibilityService source |
+| `~/bin/accessdroid/SettingsActivity.java` | Onboarding + settings + status UI |
+| `~/bin/accessdroid/VlmAgentActivity.java` | Visual (VLM) agent loop |
 | `~/bin/accessdroid/build.sh` | builds signed APK from Termux |
 | `~/bin/accessdroid/build/AccessDroid.apk` | compiled APK |
 | `~/bin/amctl` | Termux CLI control script (on `$PATH`) |

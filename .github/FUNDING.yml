@@ -1,0 +1,12 @@
+# GitHub Sponsors funding configuration
+# Enable "Sponsor" button on this repository.
+# GitHub -> Profile -> Settings -> Sponsors -> sign the agreement
+# then paste your sponsor slug here (defaults to your username).
+github: yashas-13
+
+# Optional: also accept support via other platforms
+# patreon: username
+# ko_fi: username
+# buy_me_a_coffee: username
+# open_collective: username
+# custom: ["https://paypal.me/username"]

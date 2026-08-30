@@ -1,0 +1,183 @@
+#!/data/data/com.termux/files/usr/bin/bash
+#==============================================================================
+# amctl - App control toolkit for Termux
+# Drives the AccessDroid AccessibilityService (simulates clicks, scrolls,
+# type-into-field, UI-tree inspection) + termux-am for app lifecycle.
+#
+# Prerequisites:
+#   1. AccessDroid APK built & installed (see bin/accessdroid/build.sh)
+#   2. Settings -> Accessibility -> AccessDroid  =>  ON
+#   3. termux-am socket enabled (Termux Settings -> Termux:API ->
+#      "Allow am command socket")  [only needed for app launch/stop]
+#
+# Usage: amctl <command> [args...]
+#   list     [query]            List 3rd-party apps (filter by query)
+#   find     <name>             Search apps by label (resolves app labels)
+#   launch   <app|pkg>          Launch an app
+#   stop     <app|pkg>          Force-stop an app
+#   info     <app|pkg>          Package info (path, version, uid)
+#   perms    <app|pkg>          List app permissions
+#   grant    <app|pkg> <perm>   Grant a permission
+#   revoke   <app|pkg> <perm>   Revoke a permission
+#   clear    <app|pkg>          Clear app data/cache
+#   tree                         Dump current UI tree (adb logcat | grep AccessDroid)
+#   tap      X Y [ms]           Tap at (X,Y); optional hold duration
+#   longpress X Y [ms]          Long-press at (X,Y); default 500ms
+#   swipe    X1 Y1 X2 Y2 [ms]   Swipe/drag
+#   scroll   up|down [x y]      Scroll at position
+#   back                         Press back
+#   home                         Press home
+#   recents                      Open recents
+#   type     <text>             Type text into the focused field
+#   click    "text"             Click UI element by visible text
+#   clickid  resourceId          Click UI element by resource id
+#   scrollto "text"             Scroll to an element with text
+#   screenshot [file]          Take a screenshot of the active window
+#   presskey <key>               Press a key (back/home/recents only)
+#   help                        Show this help
+#==============================================================================
+
+set -u
+PROG="amctl"
+SECRET="termux-accessdroid-2025"
+PKG="com.accessdroid.termux"
+
+# ---- send a command to AccessDroid AccessibilityService via broadcast ----
+ac() {
+    # $1 = action, rest are --es/--ei/--el extras
+    local action="$1"; shift
+    local args=(-a "$action")
+    while [[ $# -gt 0 ]]; do
+        args+=("$1"); shift
+    done
+    # Send explicitly to our package. termux-am handles the broadcast.
+    termux-am broadcast -p "$PKG" "${args[@]}" 2>/dev/null
+    if [[ $? -ne 0 ]]; then
+        echo "ERROR: failed to send command '$action'." >&2
+        echo "Is AccessDroid's accessibility service enabled?" >&2
+        echo "Settings -> Accessibility -> AccessDroid -> ON" >&2
+        return 3
+    fi
+}
+
+# ---- termux-am (app lifecycle) passthrough ----
+am() { termux-am "$@" 2>/dev/null; }
+
+# ---- package resolution (substring match -> unique package) ----
+resolve_pkg() {
+    local input="$1"
+    [[ -z "$input" ]] && { echo "missing app/package argument" >&2; return 2; }
+    if [[ "$input" == *.* ]]; then
+        if termux-am pm list packages 2>/dev/null | sed 's/^package://' | grep -qx "$input"; then
+            echo "$input"; return 0
+        fi
+    fi
+    local matches count
+    matches=$(termux-am pm list packages -f 2>/dev/null \
+        | sed 's/^package://' | awk -F'=' '{print $1}' | grep -i "$input" || true)
+    count=$(echo "$matches" | grep -c .)
+    if [[ "$count" -eq 0 ]]; then
+        echo "no package matching '$input'" >&2; return 1
+    elif [[ "$count" -gt 1 ]]; then
+        echo "'$input' matches:"; echo "$matches" >&2; return 1
+    fi
+    echo "$matches"; return 0
+}
+
+# ========================= subcommands =========================
+
+cmd_list() {
+    local q="${1:-}"
+    termux-am pm list packages -3 -f 2>/dev/null \
+        | sed 's/^package://' \
+        | if [[ -n "$q" ]]; then grep -i "$q"; else cat; fi \
+        | awk -F'=' '{printf "%-45s %s\n",$1,$2}'
+}
+
+cmd_find() {
+    local q="${1:-}"
+    [[ -z "$q" ]] && { echo "usage: amctl find <name>" >&2; return 2; }
+    command -v aapt2 >/dev/null && {
+        termux-am pm list packages -3 -f 2>/dev/null | sed 's/^package://' | while IFS='=' read -r pkg apk; do
+            local label
+            label=$(aapt2 dump badging "$apk" 2>/dev/null | sed -n "s/.*application-label:'(.*)'.app=//p" | head -1)
+            [[ -z "$label" ]] && label="(no label)"
+            if echo "$label $pkg" | grep -iq "$q"; then
+                printf "%-30s %s\n" "$label" "$pkg"
+            fi
+        done
+    } || cmd_list "$q"
+    return 0
+}
+
+cmd_launch() {
+    local pkg; pkg=$(resolve_pkg "$1") || return $?
+    local comp
+    comp=$(termux-am cmd package resolve-activity --brief \
+        -c android.intent.category.LAUNCHER \
+        -a android.intent.action.MAIN "$pkg" 2>/dev/null \
+        | sed 's/^[^:]*: //' | head -1)
+    if [[ -n "$comp" ]]; then
+        termux-am start --user 0 -n "$comp" 2>/dev/null || { echo "launch failed for $pkg"; return 1; }
+        echo "Launched $pkg -> $comp"
+    else
+        termux-am monkey -p "$pkg" -c android.intent.category.LAUNCHER 1 2>/dev/null \
+            && echo "Launched $pkg (monkey)" || { echo "launch failed for $pkg"; return 1; }
+    fi
+}
+
+cmd_stop()   { local pkg; pkg=$(resolve_pkg "$1") || return $?; termux-am force-stop "$pkg" 2>/dev/null && echo "Stopped $pkg" || { echo "stop failed"; return 1; }; }
+cmd_info()   { local pkg; pkg=$(resolve_pkg "$1") || return $?; termux-am pm dump "$pkg" 2>/dev/null | grep -E 'versionCode|targetSdk|path|uid|minSdk' | head -8; }
+cmd_perms()  { local pkg; pkg=$(resolve_pkg "$1") || return $?; termux-am pm list permissions -g -p "$pkg" 2>/dev/null; }
+cmd_grant()  { local pkg; pkg=$(resolve_pkg "$1") || return $?; shift; local perm="$1"; termux-am pm grant "$pkg" "$perm" 2>/dev/null && echo "Granted $perm to $pkg"; }
+cmd_revoke() { local p; p=$(resolve_pkg "$1") || return $?; shift; local perm; termux-am pm revoke "${p}" "${1:-}" 2>/dev/null; }
+cmd_clear()  { local pkg; pkg=$(resolve_pkg "$1") || return $?; termux-am clear package "$pkg" 2>/dev/null && echo "Cleared $pkg"; }
+cmd_tree()   { echo "Run:  log -t 30s 'AccessDroid'   (or: termux-logcat -s AccessDroid)  then 'amctl tree'"; }
+
+# input / UI subcommands (via AccessDroid)
+
+cmd_tap()        { ac com.accessdroid.termux.ACTION_TAP --ei x "${1:-0}" --ei y "${2:-0}" --el duration "${3:-80}"; }
+cmd_longpress()  { ac com.accessdroid.termux.ACTION_LONG_PRESS --ei x "${1:-0}" --ei y "${2:-0}" --el duration "${3:-500}"; }
+cmd_swipe()      { ac com.accessdroid.termux.ACTION_SWIPE --ei x1 "${1:-0}" --ei y1 "${2:-0}" --ei x2 "${3:-0}" --ei y2 "${4:-0}" --el duration "${5:-300}"; }
+cmd_scroll()     { local dir="${1:-down}"; [[ "$dir" == down ]] && ac com.accessdroid.termux.ACTION_SCROLL_DOWN --ei x "${2:-0}" --ei y "${3:-0}" \
+                    || ac com.accessdroid.termux.ACTION_SCROLL_UP --ei x "${2:-0}" --ei y "${3:-0}"; }
+cmd_back()       { termux-am broadcast -p "$PKG" -a com.accessdroid.termux.ACTION_BACK --es secret "$SECRET"; }
+cmd_home()       { termux-am broadcast -p "$PKG" -a com.accessdroid.termux.ACTION_HOME --es secret "$SECRET"; }
+cmd_recents()    { termux-am broadcast -p "$PKG" -a com.accessdroid.termux.ACTION_RECENTS --es secret "$SECRET"; }
+cmd_type()       { termux-am broadcast -p "$PKG" -a com.accessdroid.termux.ACTION_TYPE --es secret "$SECRET" --es text "$1"; }
+cmd_click()      { termux-am broadcast -p "$PKG" -a com.accessdroid.termux.ACTION_CLICK_TEXT --es secret "$SECRET" --es text "$1"; }
+cmd_clickid()    { termux-am broadcast -p "$PKG" -a com.accessdroid.termux.ACTION_CLICK_ID --es secret "$SECRET" --es id "$1"; }
+cmd_scrollto()   { termux-am broadcast -p "$PKG" -a com.accessdroid.termux.ACTION_SCROLL_TO --es secret "$SECRET" --es text "$1"; }
+cmd_shot()       { local f="${1:-/sdcard/amctl-shot.png}"; termux-am broadcast -p "$PKG" -a com.accessdroid.termux.ACTION_SCREENDUMP --es secret "$SECRET"; echo "(check logs/logcat for result; screen saved by service if implemented)"; }
+cmd_presskey()   { local k="$1"; local code=0; case "$k" in back) code=4;; home) code=3;; recents) code=187;; *) echo "only back|home|recents supported" >&2; return 1;; esac; termux-am broadcast -p "$PKG" -a com.accessdroid.termux.ACTION_PRESS_KEY --es secret "$SECRET" --ei keyCode "$code"; }
+
+# ========================= dispatcher =========================
+case "${1:-help}" in
+    list)      cmd_list "${2:-}" ;;
+    find)      cmd_find "${2:-}" ;;
+    launch)    cmd_launch "${2:-}" ;;
+    stop)      cmd_stop "${2:-}" ;;
+    info)      cmd_info "${2:-}" ;;
+    perms)     cmd_perms "${2:-}" ;;
+    grant)     cmd_grant "${2:-}" "${3:-}" ;;
+    revoke)    cmd_revoke "${2:-}" "${3:-}" ;;
+    clear)     cmd_clear "${2:-}" ;;
+    tree)      cmd_tree ;;
+    tap)       cmd_tap "${2:-}" "${3:-}" "${4:-80}" ;;
+    longpress) cmd_longpress "${2:-0}" "${3:-0}" "${4:-500}" ;;
+    swipe)     cmd_swipe "${2:-0}" "${3:-0}" "${4:-0}" "${5:-0}" "${6:-300}" ;;
+    scroll)    cmd_scroll "${2:-down}" "${3:-0}" "${4:-0}" ;;
+    back)      cmd_back ;;
+    home)      cmd_home ;;
+    recents)   cmd_recents ;;
+    type)      cmd_type "${2:-}" ;;
+    click)     cmd_click "${2:-}" ;;
+    clickid)   cmd_clickid "${2:-}" ;;
+    scrollto)  cmd_scrollto "${2:-}" ;;
+    screenshot) cmd_shot "${2:-}" ;;
+    shot)      cmd_shot "${2:-}" ;;
+    presskey)  cmd_presskey "${2:-}" ;;
+    help|-h|--help)
+        head -n 33 "$0" | sed 's/^# \{0,1\}//' ;;
+    *) echo "unknown command: $1 (use 'amctl help')" >&2; exit 1 ;;
+esac

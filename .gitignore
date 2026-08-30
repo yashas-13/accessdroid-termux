@@ -1,0 +1,10 @@
+# Build artifacts
+accessdroid/build/
+
+# Android debug keystore
+.android/
+debug.keystore
+
+# Logs / temp
+*.log
+*.tmp
